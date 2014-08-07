@@ -39,6 +39,14 @@ typedef struct device_info device_info;
 #define DEVICE_MEM_MIN	  256
 #define DEVICE_MEM_MAX    1024
 
+/* The AUTO value default to the CONFIG_NR_CPUS value used while configuring
+ * the kernel. The MAX value is just a generous value which includes the number
+ * of cores of the device. Note that the AUTO value does not do the same as
+ * setting the maxcpus to command line argument to 0, as this would disable
+ * SMP, and we do not want to do that. */
+#define DEVICE_MAXCPUS_AUTO 0
+#define DEVICE_MAXCPUS_MIN  1
+#define DEVICE_MAXCPUS_MAX  256
  
 struct device_info
 {
@@ -47,6 +55,7 @@ struct device_info
 	bool is_tampered;
 	bool charger_screen_enabled;
 	unsigned short mem_capacity;   // ram adjustment by jinzhang@t2mobile.com
+	unsigned short maxcpus;
 };
 
 #endif
