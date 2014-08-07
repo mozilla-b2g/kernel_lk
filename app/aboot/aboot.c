@@ -1996,20 +1996,20 @@ int get_mem_capacity(const char *cmd)
 
 	/* verify mem capacity from fastboot cmd */
 	if (cmd && cmd[0]==' ') {
-		int capcity = atoi(cmd + 1);
+		int capacity = atoi(cmd + 1);
 
-		snprintf(response, sizeof(response), "\tcapcity:%d", capcity);
+		snprintf(response, sizeof(response), "\tcapacity:%d", capacity);
 		fastboot_info(response);
-		if (capcity == 0) {
+		if (capacity == 0) {
 			return DEVICE_MEM_AUTO;
-		} else if (capcity >= DEVICE_MEM_MIN 
-			  && capcity <= DEVICE_MEM_MAX) {
-			return capcity;
+		} else if (capacity >= DEVICE_MEM_MIN
+			  && capacity <= DEVICE_MEM_MAX) {
+			return capacity;
 		}
 	}
 
 	fastboot_info("\tUsage: fastboot oem mem capacity");
-	fastboot_info("\tcapcity should between 256 and 1024, 0 for auto detection");
+	fastboot_info("\tcapacity should be between 256 and 1024, 0 for auto detection");
 	return -1;
 }
 
@@ -2018,7 +2018,7 @@ void cmd_oem_mem(const char *arg, void *data, unsigned sz)
 	char response[64];
 
 	int mem_capacity = get_mem_capacity(arg);
-	if (mem_capacity == -1) 
+	if (mem_capacity == -1)
 		return;
 	device.mem_capacity = (unsigned short)mem_capacity;
 	write_device_info(&device);
