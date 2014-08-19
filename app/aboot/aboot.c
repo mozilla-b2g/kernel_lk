@@ -122,6 +122,10 @@ static const char *baseband_sglte2  = " androidboot.baseband=sglte2";
 
 static const char *device_bootram = " mem=";  // for mem adjustment
 
+/* for adjusting the maximum number of processors visible */
+static const char *device_bootcpu = " maxcpus=";
+static const char *device_bootcpu2 = " nr_cpus=";
+
 static unsigned page_size = 0;
 static unsigned page_mask = 0;
 static char ffbm_mode_string[FFBM_MODE_BUF_SIZE];
@@ -130,7 +134,7 @@ static bool boot_into_ffbm;
 /* Assuming unauthorized kernel image by default */
 static int auth_kernel_img = 0;
 
-static device_info device = {DEVICE_MAGIC, 0, 0, 0, DEVICE_MEM_AUTO};
+static device_info device = {DEVICE_MAGIC, 0, 0, 0, DEVICE_MEM_AUTO, DEVICE_MAXCPUS_AUTO};
 
 struct atag_ptbl_entry
 {
@@ -168,6 +172,7 @@ char charger_screen_enabled[MAX_RSP_SIZE];
 char sn_buf[13];
 char display_panel_buf[MAX_PANEL_BUF_SIZE];
 char device_meminfo[MAX_RSP_SIZE];
+char device_cpuinfo[MAX_RSP_SIZE];
 
 extern int emmc_recovery_init(void);
 
@@ -298,6 +303,15 @@ unsigned char *update_cmdline(const char * cmdline)
 		cmdline_len += strlen(device_bootram);
 		snprintf(device_meminfo, MAX_RSP_SIZE, "%dm", device.mem_capacity);
 		cmdline_len += strlen(device_meminfo);
+	}
+
+	/* add cmdline " maxcpus=[1-256] nr_cpus=[1-256]" to manually restrict
+	 * the number of cpu */
+	if (device.maxcpus != DEVICE_MAXCPUS_AUTO) {
+		cmdline_len += strlen(device_bootcpu);
+		cmdline_len += strlen(device_bootcpu2);
+		snprintf(device_cpuinfo, MAX_RSP_SIZE, "%d", device.maxcpus);
+		cmdline_len += strlen(device_cpuinfo) * 2;
 	}
 
 	if (cmdline_len > 0) {
@@ -434,6 +448,25 @@ unsigned char *update_cmdline(const char * cmdline)
 			if (have_cmdline) --dst;
 			while ((*dst++ = *src++));
 			src = device_meminfo;
+			if (have_cmdline) --dst;
+			while ((*dst++ = *src++));
+		}
+
+		if (device.maxcpus != DEVICE_MAXCPUS_AUTO) {
+			// Copy " maxcpus=" to the command line
+			src = device_bootcpu;
+			if (have_cmdline) --dst;
+			while ((*dst++ = *src++));
+			// Copy the number to the command line
+			src = device_cpuinfo;
+			if (have_cmdline) --dst;
+			while ((*dst++ = *src++));
+			// Copy " nr_cpus=" to the command line
+			src = device_bootcpu2;
+			if (have_cmdline) --dst;
+			while ((*dst++ = *src++));
+			// Copy the number to the command line
+			src = device_cpuinfo;
 			if (have_cmdline) --dst;
 			while ((*dst++ = *src++));
 		}
@@ -1289,6 +1322,7 @@ void read_device_info_mmc(device_info *dev)
 		info->is_tampered = 0;
 		info->charger_screen_enabled = 0;
 		info->mem_capacity = DEVICE_MEM_AUTO;
+		info->maxcpus = DEVICE_MAXCPUS_AUTO;
 
 		write_device_info_mmc(info);
 	}
@@ -1996,20 +2030,20 @@ int get_mem_capacity(const char *cmd)
 
 	/* verify mem capacity from fastboot cmd */
 	if (cmd && cmd[0]==' ') {
-		int capcity = atoi(cmd + 1);
+		int capacity = atoi(cmd + 1);
 
-		snprintf(response, sizeof(response), "\tcapcity:%d", capcity);
+		snprintf(response, sizeof(response), "\tcapacity:%d", capacity);
 		fastboot_info(response);
-		if (capcity == 0) {
+		if (capacity == 0) {
 			return DEVICE_MEM_AUTO;
-		} else if (capcity >= DEVICE_MEM_MIN 
-			  && capcity <= DEVICE_MEM_MAX) {
-			return capcity;
+		} else if (capacity >= DEVICE_MEM_MIN
+			  && capacity <= DEVICE_MEM_MAX) {
+			return capacity;
 		}
 	}
 
 	fastboot_info("\tUsage: fastboot oem mem capacity");
-	fastboot_info("\tcapcity should between 256 and 1024, 0 for auto detection");
+	fastboot_info("\tcapacity should be between 256 and 1024, 0 for auto detection");
 	return -1;
 }
 
@@ -2018,7 +2052,7 @@ void cmd_oem_mem(const char *arg, void *data, unsigned sz)
 	char response[64];
 
 	int mem_capacity = get_mem_capacity(arg);
-	if (mem_capacity == -1) 
+	if (mem_capacity == -1)
 		return;
 	device.mem_capacity = (unsigned short)mem_capacity;
 	write_device_info(&device);
@@ -2030,6 +2064,50 @@ void cmd_oem_mem(const char *arg, void *data, unsigned sz)
 	}
 
 	snprintf(response, sizeof(response), "\tDevice adjusted mem: %s", device_meminfo);
+	fastboot_info(response);
+	fastboot_okay("");
+}
+
+int get_maxcpus(const char *cmd)
+{
+	char response[64];
+
+	/* verify mem capacity from fastboot cmd */
+	if (cmd && cmd[0] == ' ') {
+		int nb_cpus = atoi(cmd + 1);
+
+		snprintf(response, sizeof(response), "\tnb_cpus:%d", nb_cpus);
+		fastboot_info(response);
+		if (nb_cpus == 0) {
+			return DEVICE_MAXCPUS_AUTO;
+		} else if (nb_cpus >= DEVICE_MAXCPUS_MIN
+			  && nb_cpus <= DEVICE_MAXCPUS_MAX) {
+			return nb_cpus;
+		}
+	}
+
+	fastboot_info("\tUsage: fastboot oem maxcpus nb_cpus");
+	fastboot_info("\tnb_cpus should be between 1 and 256, 0 for kernel default");
+	return -1;
+}
+
+void cmd_oem_maxcpus(const char *arg, void *data, unsigned sz)
+{
+	char response[64];
+
+	int maxcpus = get_maxcpus(arg);
+	if (maxcpus == -1)
+		return;
+	device.maxcpus = (unsigned short) maxcpus;
+	write_device_info(&device);
+
+	if (device.maxcpus == DEVICE_MEM_AUTO) {
+		snprintf(device_cpuinfo, MAX_RSP_SIZE, "auto");
+	} else {
+		snprintf(device_cpuinfo, MAX_RSP_SIZE, "%d", device.maxcpus);
+	}
+
+	snprintf(response, sizeof(response), "\tDevice cpu limit: %s", device_cpuinfo);
 	fastboot_info(response);
 	fastboot_okay("");
 }
@@ -2247,6 +2325,15 @@ void aboot_fastboot_register_commands(void)
 	 */
 	 
 	fastboot_register("oem mem", cmd_oem_mem);
+
+	/*
+	 * register a command, "fastboot oem maxcpus [0|1-256]" to add cmdline
+	 * " maxcpus=[1-256]" to kernel boot arguments. 0 is used to let the
+	 * kernel default to CONFIG_NR_CPUS by adding no extra cmdline
+	 * argument.
+	 */
+	fastboot_register("oem maxcpus", cmd_oem_maxcpus);
+
 	/* publish variables and their values */
 	fastboot_publish("product",  TARGET(BOARD));
 	fastboot_publish("kernel",   "lk");
@@ -2278,6 +2365,14 @@ void aboot_fastboot_register_commands(void)
 		snprintf(device_meminfo, MAX_RSP_SIZE, "%dm", device.mem_capacity);
 	}
 	fastboot_publish("mem", (const char *) device_meminfo);
+
+	/* publish for "fastboot getvar maxcpus" */
+	if (device.maxcpus == DEVICE_MAXCPUS_AUTO) {
+		snprintf(device_cpuinfo, MAX_RSP_SIZE, "auto");
+	} else {
+		snprintf(device_cpuinfo, MAX_RSP_SIZE, "%d", device.maxcpus);
+	}
+	fastboot_publish("maxcpus", (const char *) device_cpuinfo);
 }
 
 void aboot_init(const struct app_descriptor *app)
