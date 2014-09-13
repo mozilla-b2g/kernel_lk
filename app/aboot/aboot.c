@@ -70,8 +70,10 @@
 
 #include "scm.h"
 /*czb@tcl.com add bootloader version info*/
+#if 0
 #define JRD_VERSION
 #include "version.inc"
+#endif
 /*czb@tcl.com add bootloader version info*/
 
 extern  bool target_use_signed_kernel(void);
